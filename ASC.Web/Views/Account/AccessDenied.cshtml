@@ -1,0 +1,11 @@
+﻿@using Microsoft.AspNetCore.Http
+@inject IHttpContextAccessor UserHttpContext
+@{
+    ViewData["Title"] = "Error";
+    Layout = !UserHttpContext.HttpContext.User.Identity.IsAuthenticated ? "_Layout" : "_SecureLayout";
+}
+
+<header>
+    <h1 class="text-danger">Access Denied.</h1>
+    <p class="text-danger">You do not have access to this resource.</p>
+</header>

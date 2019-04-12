@@ -1,0 +1,260 @@
+{\rtf1\ansi\ansicpg1250\deff0\nouicompat\deflang5146{\fonttbl{\f0\fnil\fcharset0 Calibri;}}
+{\colortbl ;\red0\green0\blue255;}
+{\*\generator Riched20 10.0.17763}\viewkind4\uc1 
+\pard\sa200\sl276\slmult1\f0\fs22 using System;\par
+using System.Collections.Generic;\par
+using System.Linq;\par
+using System.Threading.Tasks;\par
+using Microsoft.AspNetCore.Builder;\par
+using Microsoft.AspNetCore.Hosting;\par
+using Microsoft.EntityFrameworkCore;\par
+using Microsoft.Extensions.Configuration;\par
+using Microsoft.Extensions.DependencyInjection;\par
+using Microsoft.Extensions.Logging;\par
+using ASC.Web.Data;\par
+using ASC.Web.Models;\par
+using ASC.Web.Services;\par
+using ASC.Web.Configuration;\par
+using ElCamino.AspNetCore.Identity.AzureTable.Model;\par
+using Microsoft.AspNetCore.Identity;\par
+using Microsoft.Extensions.Options;\par
+using Microsoft.AspNetCore.Http;\par
+using System.Security.Principal;\par
+using ASC.DataAccess.Interfaces;\par
+using ASC.DataAccess;\par
+using ASC.Business.Interfaces;\par
+using ASC.Business;\par
+using AutoMapper;\par
+using Newtonsoft.Json.Serialization;\par
+using ASC.Web.Logger;\par
+using ASC.Web.Filters;\par
+using System.Reflection;\par
+using Microsoft.Extensions.FileProviders;\par
+using Microsoft.AspNetCore.Mvc.Razor;\par
+using System.Globalization;\par
+using Microsoft.AspNetCore.Localization;\par
+using System.Reflection;\par
+\par
+namespace ASC.Web\par
+\{\par
+    public class Startup\par
+    \{\par
+        public Startup(IHostingEnvironment env)\par
+        \{\par
+            var builder = new ConfigurationBuilder()\par
+                .SetBasePath(env.ContentRootPath)\par
+                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)\par
+                .AddJsonFile($"appsettings.\{env.EnvironmentName\}.json", optional: true);\par
+\par
+            if (env.IsDevelopment())\par
+            \{\par
+                // For more details on using the user secret store see {{\field{\*\fldinst{HYPERLINK https://go.microsoft.com/fwlink/?LinkID=532709 }}{\fldrslt{https://go.microsoft.com/fwlink/?LinkID=532709\ul0\cf0}}}}\f0\fs22\par
+                builder.AddUserSecrets<Startup>();\par
+            \}\par
+\par
+            builder.AddEnvironmentVariables();\par
+            Configuration = builder.Build();\par
+        \}\par
+\par
+        public IConfigurationRoot Configuration \{ get; \}\par
+\par
+        // This method gets called by the runtime. Use this method to add services to the container.\par
+        public void ConfigureServices(IServiceCollection services)\par
+        \{\par
+            services.AddSignalR(options =>\par
+            \{\par
+                options.Hubs.EnableDetailedErrors = true;\par
+            \});\par
+\par
+            // Add framework services.\par
+            //services.AddDbContext<ApplicationDbContext>(options =>\par
+            //    options.UseSqlServer(Configuration.GetConnectionString("DefaultConnection")));\par
+\par
+            //services.AddIdentity<ApplicationUser, IdentityRole>()\par
+            //    .AddEntityFrameworkStores<ApplicationDbContext>()\par
+            //    .AddDefaultTokenProviders();\par
+\par
+            //Dodavanje Elcamino azure table identity servisa\par
+            services.AddIdentity<ApplicationUser, IdentityRole>(options =>\par
+                \{\par
+                    options.User.RequireUniqueEmail = true;\par
+                    options.Password.RequireDigit = false;\par
+                    options.Password.RequireUppercase = false;\par
+                    options.Password.RequireNonAlphanumeric = false;\par
+\par
+                    //da se ne poziva automatski View AccessDenied\par
+                    options.Cookies.ApplicationCookie.AutomaticChallenge = false;\par
+\par
+                \})\par
+                .AddAzureTableStores<ApplicationDbContext>(() =>\par
+                \{\par
+                    IdentityConfiguration idconfig = new IdentityConfiguration\par
+                    \{\par
+                        TablePrefix = Configuration.GetSection("IdentityAzureTable:IdentityConfiguration:TablePrefix").Value,\par
+                        StorageConnectionString = Configuration.GetSection("IdentityAzureTable:IdentityConfiguration:StorageConnectionString").Value,\par
+                        LocationMode = Configuration.GetSection("IdentityAzureTable:IdentityConfiguration:LocationMode").Value\par
+                    \};\par
+                    return idconfig;\par
+                \})\par
+                .AddDefaultTokenProviders()\par
+                .CreateAzureTablesIfNotExists<ApplicationDbContext>();\par
+\par
+\par
+            services.AddDistributedMemoryCache();\par
+\par
+            //services.AddDistributedRedisCache(options =>\par
+            //\{\par
+            //    options.Configuration = Configuration.GetSection("CacheSettings:CacheConnectionString").Value;\par
+            //    options.InstanceName = Configuration.GetSection("CacheSettings:CacheInstance").Value;\par
+                \par
+            //\});\par
+            \par
+            services.AddSession();\par
+            services.AddMvc(options =>\par
+                \{\par
+                    options.Filters.Add(typeof(CustomExceptionFilter));\par
+                \})\par
+                .AddJsonOptions(options =>\par
+                \{\par
+                    options.SerializerSettings.ContractResolver = new DefaultContractResolver();\par
+                \});\par
+                //.AddViewLocalization(LanguageViewLocationExpanderFormat.Suffix, options =>\par
+                //\{\par
+                //    options.ResourcesPath = "Resources";\par
+                //\})\par
+                //.AddDataAnnotationsLocalization(options => \{\par
+                //    options.DataAnnotationLocalizerProvider =\par
+                //        (type, factory) => factory.Create(typeof(SharedResources));\par
+                //\});\par
+            services.AddLocalization();\par
+            //services.Configure<RequestLocalizationOptions>(options =>\par
+            //\{\par
+            //    var supportedCultures = new List<CultureInfo>\par
+            //    \{\par
+            //        new CultureInfo("en-US"),\par
+            //        new CultureInfo("es-MX")\par
+            //    \};\par
+            //    options.DefaultRequestCulture = new RequestCulture("en-US");\par
+            //    // Formatting numbers, dates, etc.\par
+            //    options.SupportedCultures = supportedCultures;\par
+            //    // UI strings that we have localized.\par
+            //    options.SupportedUICultures = supportedCultures;\par
+            //\});\par
+\par
+\par
+            services.AddAutoMapper();\par
+\par
+ \par
+            //moze i ne mora da se koristi zato sto svaki controler,view... vec implementriarn\par
+            //PROVJERITI DA LI SE MOZE IZBRISATI\par
+            services.AddOptions();\par
+            //Mapira iz appsetings u klasu\par
+            //ako ne pronadje mapiranje postavlja se na null\par
+            services.Configure<ApplicationSettings>(Configuration.GetSection("AppSettings"));\par
+\par
+\par
+            //Add support to embedded views from ASC.Utilities project.\par
+            Assembly assembly = typeof(ASC.Utilities.Navigation.LeftNavigationViewComponent).GetTypeInfo().Assembly;\par
+            var embeddedFileProvider = new EmbeddedFileProvider(assembly, "ASC.Utilities");\par
+\par
+            services.Configure<RazorViewEngineOptions>(options =>\par
+            \{\par
+                options.FileProviders.Add(embeddedFileProvider);\par
+            \});\par
+\par
+            // Add application services.\par
+            services.AddTransient<IEmailSender, AuthMessageSender>();\par
+            services.AddTransient<ISmsSender, AuthMessageSender>();\par
+            services.AddSingleton<IIdentitySeed, IdentitySeed>();\par
+            services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();\par
+\par
+            services.AddSingleton<IUnitOfWork>(p=>new UnitOfWork(Configuration.GetSection("ConnectionStrings:DefaultConnection").Value));\par
+            services.AddScoped<IMasterDataOperations, MasterDataOperations>();\par
+            services.AddSingleton<IMasterDataCacheOperations, MasterDataCacheOperations>();\par
+            services.AddScoped<ILogDataOperations, LogDataOperations>();\par
+            services.AddSingleton<INavigationCacheOperations, NavigationCacheOperations>();\par
+            services.AddScoped<IServiceRequestOperations, ServiceRequestOperations>();\par
+            services.AddScoped<IServiceRequestMessageOperations, ServiceRequestMessageOperations>();\par
+        \}\par
+\par
+        // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.\par
+        public async void Configure(IApplicationBuilder app, \par
+            IHostingEnvironment env, \par
+            ILoggerFactory loggerFactory,\par
+            IIdentitySeed storageSeed, \par
+            IUnitOfWork unitOfWork,\par
+            IMasterDataCacheOperations masterDataCacheOperations,\par
+            ILogDataOperations logDataOperations,\par
+            INavigationCacheOperations navigationCacheOperations)\par
+        \{\par
+            loggerFactory.AddConsole(Configuration.GetSection("Logging"));\par
+            loggerFactory.AddDebug();\par
+\par
+            //loggerFactory.AddAzureTableStorageLog(logDataOperations,\par
+            //    (categoryName, logLevel) => !categoryName.Contains("Microsoft") &&\par
+            //    logLevel >= LogLevel.Information);\par
+\par
+            if (env.IsDevelopment())\par
+            \{\par
+                app.UseBrowserLink();\par
+                app.UseDeveloperExceptionPage();\par
+                app.UseDatabaseErrorPage();\par
+            \}\par
+            else\par
+            \{\par
+                app.UseExceptionHandler("/Home/Error");\par
+            \}\par
+            //var options = app.ApplicationServices.GetService<IOptions<RequestLocalizationOptions>>();\par
+            //app.UseRequestLocalization(options.Value);\par
+            //app.UseStatusCodePagesWithRedirects("/Home/Error/\{0\}");\par
+            app.UseSession();\par
+\par
+            app.UseStaticFiles();\par
+\par
+            app.UseIdentity();\par
+\par
+\par
+            app.UseGoogleAuthentication(new GoogleOptions()\par
+            \{\par
+                ClientId = Configuration["Google:Identity:ClientId"],\par
+                ClientSecret = Configuration["Google:Identity:ClientSecret"]\par
+\par
+            \});\par
+\par
+            // Add external authentication middleware below. To configure them please see {{\field{\*\fldinst{HYPERLINK https://go.microsoft.com/fwlink/?LinkID=532715 }}{\fldrslt{https://go.microsoft.com/fwlink/?LinkID=532715\ul0\cf0}}}}\f0\fs22\par
+\par
+            app.UseMvc(routes =>\par
+            \{\par
+                routes.MapRoute(name: "areaRoute",\par
+                    template: "\{area:exists\}/\{controller=Home\}/\{action=Index\}/\{id?\}");\par
+\par
+                routes.MapRoute(\par
+                    name: "default",\par
+                    template: "\{controller=Home\}/\{action=Index\}/\{id?\}");\par
+            \});\par
+\par
+            app.UseWebSockets();\par
+            app.UseSignalR();\par
+\par
+            await storageSeed.Seed(\par
+                app.ApplicationServices.GetService<UserManager<ApplicationUser>>(),\par
+                app.ApplicationServices.GetService<RoleManager<IdentityRole>>(),\par
+                app.ApplicationServices.GetService<IOptions<ApplicationSettings>>()\par
+            );\par
+\par
+            var models = Assembly.Load(new AssemblyName("ASC.Models")).GetTypes().Where(type => type.Namespace == "ASC.Models.Models");\par
+            foreach (var model in models)\par
+            \{\par
+                object repositoryInstance = Activator.CreateInstance(typeof(Repository<>).MakeGenericType(model), unitOfWork);\par
+                MethodInfo method = typeof(Repository<>).MakeGenericType(model).GetMethod("CreateTableAsync");\par
+                method.Invoke(repositoryInstance, new object[0]);\par
+            \}\par
+\par
+            await masterDataCacheOperations.CreateMasterDataCacheAsync();\par
+            await navigationCacheOperations.CreateNavigationCacheAsync();\par
+\par
+        \}\par
+    \}\par
+\}\par
+}
+ 
